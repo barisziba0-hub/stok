@@ -104,6 +104,7 @@
   <button data-tab="tara" class="active">Tara</button>
   <button data-tab="stok">Stok</button>
   <button data-tab="hareket">Hareketler</button>
+  <button data-tab="rapor">Rapor</button>
   <button data-tab="ayar">Ayarlar</button>
 </nav>
 
@@ -151,6 +152,29 @@
   <section id="hareket" class="view">
     <h2>Son hareketler</h2>
     <div class="panel" id="hareket-liste"></div>
+  </section>
+
+<!-- RAPOR -->
+  <section id="rapor" class="view">
+    <h2>Rapor</h2>
+    <div class="row" style="margin-bottom:12px">
+      <select id="rapor-donem">
+        <option value="buay">Bu ay</option>
+        <option value="3ay">Son 3 ay</option>
+        <option value="tum" selected>Tümü</option>
+      </select>
+      <button class="btn sm gray" id="rapor-yenile">Yenile</button>
+    </div>
+    <div class="cards">
+      <div class="card"><div class="k">Dönemde toplam çıkış</div><div class="v" id="r-toplam">0</div></div>
+      <div class="card"><div class="k">Hareketli parça</div><div class="v" id="r-cesit">0</div></div>
+    </div>
+    <h2>En çok kullanılan (adet)</h2>
+    <div id="rapor-cokadet"></div>
+    <h2>En çok para giden (değer)</h2>
+    <div id="rapor-cokdeger"></div>
+    <h2>Hiç / az kullanılan (ölü stok)</h2>
+    <div id="rapor-olustok"></div>
   </section>
 
   <!-- AYARLAR -->
@@ -207,6 +231,7 @@
     <div class="acts" style="margin-top:14px">
       <button class="btn" id="p-kaydet">Kaydet</button>
       <button class="btn gray" id="p-iptal">Vazgeç</button>
+      <button class="btn warn" id="p-sil" style="display:none;margin-left:auto">Sil</button>
     </div>
   </div>
 </dialog>
@@ -234,6 +259,7 @@ document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
   document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
   b.classList.add("active");document.getElementById(b.dataset.tab).classList.add("active");
   if(b.dataset.tab!=="tara")kameraDurdur();
+  if(b.dataset.tab==="rapor")raporYukle();
   window.scrollTo(0,0);
 });
 
@@ -398,6 +424,7 @@ function parcaAc(p){
   document.getElementById("p-fiyat").value=p&&p.fiyat?p.fiyat:"";
   document.getElementById("p-tedarik").value=p&&p.tedarik?p.tedarik:"";
   document.getElementById("p-tedarik-tel").value=p&&p.tedarikTel?p.tedarikTel:"";
+  document.getElementById("p-sil").style.display=pDuzenleBarkod?"inline-flex":"none";
   pDlg.showModal();
 }
 document.getElementById("p-iptal").onclick=()=>pDlg.close();
@@ -463,6 +490,52 @@ document.getElementById("csv-hareket").onclick=()=>{
   (db.hareketler||[]).forEach(h=>rows.push([h.tarih,h.tip,h.barkod,h.ad,h.miktar,h.kalan,h.kim]));
   csvIndir("gilol-hareketler-"+bugun()+".csv",rows);
 };
+
+/* ---- parça sil ---- */
+document.getElementById("p-sil").onclick=async()=>{
+  if(!pDuzenleBarkod)return;
+  const ad=document.getElementById("p-ad").value||pDuzenleBarkod;
+  if(!confirm("Bu parca tamamen silinsin mi?\n\n"+ad+"\n\nStok kaydi kalkar (hareket gecmisi kalir)."))return;
+  if(!cloudCfg()){alert("Once Google baglantisini kur.");return;}
+  try{const r=await cloudGonder("sil",{barkod:pDuzenleBarkod,kim:db.ayar.kim||""});
+    db.stok=r.stok||db.stok;if(r.hareketler)db.hareketler=r.hareketler;kaydetYerel();tazele();pDlg.close();bip(true);fb&&fb("info","Silindi: "+esc(ad));}
+  catch(e){alert("Silme hatasi: "+e.message);}
+};
+
+/* ---- rapor ---- */
+async function raporYukle(){
+  const el=id=>document.getElementById(id);
+  el("rapor-cokadet").innerHTML='<div class="empty">Yukleniyor...</div>';
+  const c=cloudCfg();
+  if(c){try{const r=await fetch(c.url+"?token="+encodeURIComponent(c.token)+"&mode=rapor",{method:"GET"});const j=await r.json();if(j.ok){db.stok=j.stok||db.stok;db.raporHareket=j.hareketler||[];kaydetYerel();}}catch(e){}}
+  raporCiz();
+}
+document.getElementById("rapor-yenile").onclick=raporYukle;
+document.getElementById("rapor-donem").onchange=raporCiz;
+function raporCiz(){
+  const el=id=>document.getElementById(id);
+  const donem=el("rapor-donem").value;
+  const hepsi=(db.raporHareket&&db.raporHareket.length?db.raporHareket:(db.hareketler||[]));
+  let esik="";
+  if(donem==="buay")esik=bugun().slice(0,7);
+  else if(donem==="3ay"){const d=new Date();d.setMonth(d.getMonth()-3);esik=d.toISOString().slice(0,10);}
+  const cikislar=hepsi.filter(h=>h.tip==="cikis"&&(!esik||String(h.tarih||"")>=esik));
+  const agg={};
+  cikislar.forEach(h=>{const k=String(h.barkod);if(!agg[k])agg[k]={barkod:k,ad:h.ad,adet:0};agg[k].adet+=(Number(h.miktar)||0);});
+  const fiyatBul=k=>{const p=db.stok.find(x=>String(x.barkod)===String(k));return p?(Number(p.fiyat)||0):0;};
+  const adBul=k=>{const p=db.stok.find(x=>String(x.barkod)===String(k));return (p&&p.ad)||(agg[k]&&agg[k].ad)||k;};
+  const liste=Object.values(agg);
+  el("r-toplam").textContent=liste.reduce((t,x)=>t+x.adet,0);
+  el("r-cesit").textContent=liste.length;
+  const satir=(ad,sag)=>'<div class="item"><div class="top"><div><div class="ad">'+esc(ad)+'</div></div><div class="adet"><div class="n">'+sag+'</div></div></div></div>';
+  const cokAdet=liste.slice().sort((a,b)=>b.adet-a.adet).slice(0,10);
+  el("rapor-cokadet").innerHTML=cokAdet.length?cokAdet.map(x=>satir(adBul(x.barkod),x.adet+" adet")).join(""):'<div class="empty">Veri yok.</div>';
+  const cokDeger=liste.map(x=>({ad:adBul(x.barkod),deger:x.adet*fiyatBul(x.barkod)})).filter(x=>x.deger>0).sort((a,b)=>b.deger-a.deger).slice(0,10);
+  el("rapor-cokdeger").innerHTML=cokDeger.length?cokDeger.map(x=>satir(x.ad,"\u20ba"+x.deger.toLocaleString("tr-TR"))).join(""):'<div class="empty">Fiyat girilmemis.</div>';
+  const kullanilan={};liste.forEach(x=>kullanilan[String(x.barkod)]=true);
+  const olu=db.stok.filter(p=>!kullanilan[String(p.barkod)]).sort((a,b)=>(a.ad||"").localeCompare(b.ad||"")).slice(0,20);
+  el("rapor-olustok").innerHTML=olu.length?olu.map(p=>satir((p.ad||p.barkod),"kalan "+(p.adet||0))).join(""):'<div class="empty">Hepsi hareket gormus.</div>';
+}
 
 /* ---- başlat ---- */
 // Google bağlantısı uygulamaya gömülü — her usta sadece linki açar.
