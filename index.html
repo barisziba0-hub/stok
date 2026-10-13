@@ -247,7 +247,7 @@ function kameraBaslat(){
   if(typeof Html5Qrcode==="undefined"){fb("warn","Barkod kütüphanesi yüklenemedi (internet?).");return;}
   const F=(window.Html5QrcodeSupportedFormats||{});const fmts=[F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.CODE_128,F.CODE_39,F.CODE_93,F.ITF,F.CODABAR,F.QR_CODE].filter(x=>x!==undefined);scanner=new Html5Qrcode("reader",fmts.length?{formatsToSupport:fmts,experimentalFeatures:{useBarCodeDetectorIfSupported:true}}:{experimentalFeatures:{useBarCodeDetectorIfSupported:true}});
   taranıyor=true;document.getElementById("kamera-ac").textContent="■ Kamerayı durdur";
-  scanner.start({facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080},advanced:[{focusMode:"continuous"}]},{fps:10,qrbox:(w,h)=>({width:Math.round(Math.min(w*0.9,360)),height:Math.round(Math.min(h*0.5,220))})},
+  scanner.start({facingMode:"environment"},{fps:10,qrbox:(w,h)=>({width:Math.round(Math.min(w*0.9,360)),height:Math.round(Math.min(h*0.5,220))}),videoConstraints:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080},advanced:[{focusMode:"continuous"}]}},
     (txt)=>{const n=Date.now();if(txt===sonKod&&n-sonZaman<2500)return;sonKod=txt;sonZaman=n;barkodIsle(txt);},
     ()=>{}
   ).catch(e=>{fb("warn","Kamera açılamadı: "+e+" — https adres ve kamera izni gerekir.");taranıyor=false;document.getElementById("kamera-ac").textContent="📷 Kamera ile tara";});
