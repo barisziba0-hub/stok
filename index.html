@@ -54,6 +54,7 @@
   #reader{width:100%;border-radius:12px;overflow:hidden;margin:10px 0;background:#000;min-height:0}
   #reader:empty{margin:0}
   #reader video{display:block!important;width:100%!important;height:auto!important;border-radius:12px;background:#000}
+  #reader canvas{display:none!important}
   .feedback{border-radius:10px;padding:14px;margin:12px 0;font-size:15px;display:none}
   .feedback.ok{background:var(--ok-bg);color:var(--ok);display:block}
   .feedback.warn{background:var(--warn-bg);color:var(--warn);display:block}
@@ -201,7 +202,7 @@
   </div>
 </dialog>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
 <script>
 const KEY="gilol_stok_v1";
 let db={stok:[],hareketler:[],ayar:{}};
@@ -241,19 +242,41 @@ function bip(ok){try{navigator.vibrate&&navigator.vibrate(ok?80:[60,40,60]);}cat
   try{const a=new (window.AudioContext||window.webkitAudioContext)();const o=a.createOscillator();const g=a.createGain();
     o.connect(g);g.connect(a.destination);o.frequency.value=ok?880:300;g.gain.value=.1;o.start();setTimeout(()=>{o.stop();a.close();},140);}catch(e){}}
 
-/* ---- kamera ---- */
+/* ---- kamera (Quagga2) ---- */
 document.getElementById("kamera-ac").onclick=()=>{taranıyor?kameraDurdur():kameraBaslat();};
+let qStarted=false, sonAday="", sonAdaySay=0;
 function kameraBaslat(){
-  if(typeof Html5Qrcode==="undefined"){fb("warn","Barkod kütüphanesi yüklenemedi (internet?).");return;}
-  const F=(window.Html5QrcodeSupportedFormats||{});const fmts=[F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.CODE_128,F.CODE_39,F.CODE_93,F.ITF,F.CODABAR,F.QR_CODE].filter(x=>x!==undefined);scanner=new Html5Qrcode("reader",fmts.length?{formatsToSupport:fmts,experimentalFeatures:{useBarCodeDetectorIfSupported:true}}:{experimentalFeatures:{useBarCodeDetectorIfSupported:true}});
+  if(typeof Quagga==="undefined"){fb("warn","Barkod kütüphanesi yüklenemedi (internet?).");return;}
   taranıyor=true;document.getElementById("kamera-ac").textContent="■ Kamerayı durdur";
-  scanner.start({facingMode:"environment"},{fps:10,qrbox:(w,h)=>({width:Math.round(Math.min(w*0.9,360)),height:Math.round(Math.min(h*0.5,220))}),videoConstraints:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080},advanced:[{focusMode:"continuous"}]}},
-    (txt)=>{const n=Date.now();if(txt===sonKod&&n-sonZaman<2500)return;sonKod=txt;sonZaman=n;barkodIsle(txt);},
-    ()=>{}
-  ).catch(e=>{fb("warn","Kamera açılamadı: "+e+" — https adres ve kamera izni gerekir.");taranıyor=false;document.getElementById("kamera-ac").textContent="📷 Kamera ile tara";});
+  fb("info","Kamera başlatılıyor…");
+  const target=document.getElementById("reader");
+  Quagga.init({
+    inputStream:{type:"LiveStream",target:target,constraints:{facingMode:"environment",width:{ideal:1280},height:{ideal:720}},area:{top:"25%",right:"5%",left:"5%",bottom:"25%"}},
+    locator:{patchSize:"medium",halfSample:true},
+    numOfWorkers:0,frequency:10,
+    decoder:{readers:["ean_reader","ean_8_reader","upc_reader","upc_e_reader","code_128_reader","code_39_reader","i2of5_reader"]}
+  },function(err){
+    if(err){taranıyor=false;document.getElementById("kamera-ac").textContent="📷 Kamera ile tara";fb("warn","Kamera açılamadı: "+err+" — https adres ve kamera izni gerekir.");return;}
+    try{const v=target.querySelector("video");if(v){v.setAttribute("playsinline","true");v.muted=true;}}catch(e){}
+    Quagga.start();qStarted=true;fb("info","Barkodu kutuya tut, net olunca okur…");
+  });
+  Quagga.onDetected(onQuagga);
 }
-function kameraDurdur(){if(scanner&&taranıyor){scanner.stop().then(()=>{scanner.clear();}).catch(()=>{});}
-  taranıyor=false;const b=document.getElementById("kamera-ac");if(b)b.textContent="📷 Kamera ile tara";}
+function onQuagga(result){
+  if(!result||!result.codeResult||!result.codeResult.code)return;
+  const code=result.codeResult.code;
+  if(code===sonAday){sonAdaySay++;}else{sonAday=code;sonAdaySay=1;}
+  if(sonAdaySay<2)return;
+  const n=Date.now();if(code===sonKod&&n-sonZaman<2500)return;
+  sonKod=code;sonZaman=n;sonAday="";sonAdaySay=0;
+  barkodIsle(code);
+}
+function kameraDurdur(){
+  try{if(qStarted){Quagga.offDetected(onQuagga);Quagga.stop();}}catch(e){}
+  qStarted=false;taranıyor=false;
+  const r=document.getElementById("reader");if(r)r.innerHTML="";
+  const b=document.getElementById("kamera-ac");if(b)b.textContent="📷 Kamera ile tara";
+}
 
 /* ---- elle barkod ---- */
 document.getElementById("barkod-ekle").onclick=()=>{const v=document.getElementById("barkod-input").value.trim();if(v)barkodIsle(v);};
