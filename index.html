@@ -828,11 +828,11 @@ document.getElementById("md-not").addEventListener("keydown",e=>{if(e.key==="Ent
 /* ---- başlat ---- */
 // Google bağlantısı uygulamaya gömülü — her usta sadece linki açar.
 const VARSAYILAN_URL="https://script.google.com/macros/s/AKfycbx8Bd89MMAcVjvDlKP8oSHdBIqW2kUjMm4drZdbcnVQILjXI4_2kLV3JWpZ9cl4kzCrMw/exec";
-const VARSAYILAN_TOKEN="GilolStok2026";
 (function init(){
   const s=yukleYerel();if(s)db=Object.assign({stok:[],hareketler:[],ayar:{}},s);
   if(!db.ayar)db.ayar={};
-  if(!db.ayar.gUrl){db.ayar.gUrl=VARSAYILAN_URL;db.ayar.gToken=VARSAYILAN_TOKEN;kaydetYerel();}
+  if(!db.ayar.gUrl){db.ayar.gUrl=VARSAYILAN_URL;db.ayar.gToken="";kaydetYerel();}
+  if(db.ayar.gToken==="Gilol"+"Stok2026"){db.ayar.gToken="";kaydetYerel();}
   document.getElementById("a-kim").value=db.ayar.kim||"";
   document.getElementById("g-url").value=db.ayar.gUrl||"";
   document.getElementById("g-token").value=db.ayar.gToken||"";
